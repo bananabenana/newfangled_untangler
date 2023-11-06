@@ -14,7 +14,8 @@ def create_directory(directory):
 parser = argparse.ArgumentParser(description='Separate genomes based on metadata.')
 parser.add_argument('-i', '--input', required=True, help='Input data file containing metadata columns. Tab delimited. File extensions not required in ID col (col 1)')
 parser.add_argument('-c', '--columns', type=int, default=3, help='Number of metadata columns not including ID col (col 1)')
-parser.add_argument('-d', '--fasta_directory', required=True, help='Directory containing fasta files to be seperated based on metadata')
+parser.add_argument('-d', '--fasta_directory', required=True, help='Directory containing fasta files to be separated based on metadata')
+parser.add_argument('--version', action='version', version='1.0.4')  # Add version information
 args = parser.parse_args()
 
 # Update the input directory argument to accept multiple file extensions
@@ -37,7 +38,7 @@ create_directory('unique_metadata')
 # Copy genomes with unique metadata
 for filename in uniques_all[identifier_column]:
     base_filename = f"{filename}.fasta"
-    possible_extensions = [".fasta", ".fna"]
+    possible_extensions = [".fasta", ".fna", ".fa"]
 
     source = None
     for ext in possible_extensions:
@@ -55,28 +56,36 @@ for filename in uniques_all[identifier_column]:
 # Create 'duplicated_metadata' directory
 create_directory('duplicated_metadata')
 
-# Copy genomes with duplicated metadata to separate directories
+# Dictionary to collect filenames with the same metadata combination
+metadata_combinations = {}
+
 for idx, row in dupes_all.iterrows():
     key = '_'.join(str(row[column]) for column in metadata_columns)
+    if key not in metadata_combinations:
+        metadata_combinations[key] = []
+    metadata_combinations[key].append(row[identifier_column])
+
+# Copy genomes with duplicated metadata to separate directories
+for key, filenames in metadata_combinations.items():
     key_dir = os.path.join('duplicated_metadata', key)
     create_directory(key_dir)
+    
+    for filename in filenames:
+        base_filename = f"{filename}.fasta"
+        possible_extensions = [".fasta", ".fna", ".fa"]
 
-    # Construct the source and destination paths
-    base_filename = f"{row[identifier_column]}.fasta"
-    possible_extensions = [".fasta", ".fna"]
+        source = None
+        for ext in possible_extensions:
+            potential_source = os.path.join(args.fasta_directory, f"{filename}{ext}")
+            if os.path.exists(potential_source):
+                source = potential_source
+                break  # Found a valid source, no need to continue checking
 
-    source = None
-    for ext in possible_extensions:
-        potential_source = os.path.join(args.fasta_directory, f"{row[identifier_column]}{ext}")
-        if os.path.exists(potential_source):
-            source = potential_source
-            break  # Found a valid source, no need to continue checking
-
-    if source:
-        destination = os.path.join(key_dir, base_filename)
-        shutil.copy(source, destination)
-    else:
-        print(f"Warning: No valid source file found for {base_filename}")
+        if source:
+            destination = os.path.join(key_dir, base_filename)
+            shutil.copy(source, destination)
+        else:
+            print(f"Warning: No valid source file found for {base_filename}")
 
 # Save unique and duplicated metadata lists
 uniques_all.to_csv('uniques_all.tsv', sep='\t', index=False)
